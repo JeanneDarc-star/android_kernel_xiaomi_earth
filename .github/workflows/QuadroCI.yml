@@ -29,10 +29,10 @@ env:
   CLANG_DIR: /home/runner/toolchain/clang
   AK3_REPO: https://github.com/JeanneDarc-star/AnyKernel3.git
   # KernelSU
-  KSU_SETUP_URL: https://github.com/JeanneDarc-star/KernelSU/raw/refs/heads/KSUSUSFS/kernel/setup.sh
-  KSU_REF: KSUSUSFS
-  # config helper (tanpa prefix CONFIG_)
-  KSU_CONFIGS: "KSU KSU_SUSFS KSU_HACK_ARM64_BRANCH_LINK"
+  KSU_SETUP_URL: https://github.com/backslashxx/KernelSU/raw/refs/heads/master/kernel/setup.sh
+  KSU_REF: master
+  # config yang di-enable untuk varian ksu (tanpa prefix CONFIG_), tambah susfs di sini
+  KSU_CONFIGS: "KSU KSU_HACK_ARM64_BRANCH_LINK"
 
 jobs:
   build:
@@ -122,7 +122,7 @@ jobs:
             make O=out ARCH=${ARCH} olddefconfig
             # olddefconfig diam-diam membuang opsi yang dependensinya tidak terpenuhi
             grep -q '^CONFIG_KSU=y' out/.config || { echo "CONFIG_KSU tidak aktif"; exit 1; }
-            grep -E '^CONFIG_(KSU|KPROBES|HAVE_KPROBES|KPROBE_EVENTS)' out/.config || true
+            grep -E '^CONFIG_KSU' out/.config || true
           fi
 
           START=$(date +%s)
