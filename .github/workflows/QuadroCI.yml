@@ -1,28 +1,48 @@
-name: Quadro CI
+name: QuadroCI
 
-on:          
+on:
   workflow_dispatch:
     inputs:
       defconfig:
         description: "Defconfig"
         required: true
         default: "earth_defconfig"
+      variant:
+        description: "Varian build"
+        required: true
+        type: choice
+        default: both
+        options:
+          - both
+          - vanilla
+          - ksu
 
 env:
   ARCH: arm64
   DEFCONFIG: ${{ github.event.inputs.defconfig || 'earth_defconfig' }}
-  KERNEL_NAME: Quadro
+  KERNEL_NAME: Kernel
   BUILDER: github-actions
   BUILD_HOST: github
-  LOCALVERSION: -ci
+  LOCALVERSION_BASE: -ci
   CCACHE_DIR: /home/runner/.ccache
   CLANG_URL: https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/28337064939c0b4bb5804cddf35fb03d860edcf6/clang-r614150.tar.gz
   CLANG_DIR: /home/runner/toolchain/clang
   AK3_REPO: https://github.com/JeanneDarc-star/AnyKernel3.git
+  # KernelSU
+  KSU_SETUP_URL: https://github.com/JeanneDarc-star/KernelSU/raw/refs/heads/KSUSUSFS/kernel/setup.sh
+  KSU_REF: KSUSUSFS
+  # config helper (tanpa prefix CONFIG_)
+  KSU_CONFIGS: "KSU KSU_SUSFS KSU_HACK_ARM64_BRANCH_LINK"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(github.event.inputs.variant == 'both' && '["vanilla","ksu"]' || format('["{0}"]', github.event.inputs.variant)) }}
+    env:
+      VARIANT: ${{ matrix.variant }}
     steps:
       - name: Check out kernel source
         uses: actions/checkout@v7
@@ -64,23 +84,46 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ runner.os }}-${{ github.sha }}
+          key: ccache-${{ matrix.variant }}-${{ runner.os }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-
+            ccache-${{ matrix.variant }}-${{ runner.os }}-
+
+      - name: Integrate KernelSU
+        if: matrix.variant == 'ksu'
+        run: |
+          set -o pipefail
+          cd "$GITHUB_WORKSPACE"
+          curl -fLSs "$KSU_SETUP_URL" | bash -s "$KSU_REF"
 
       - name: Compile kernel
         run: |
           set -o pipefail
           clang --version | head -n1
 
+          # buang prefix arch/<arch>/configs/ kalau diisi path lengkap
+          DEFCONFIG="${DEFCONFIG#arch/*/configs/}"
+
+          LV="$LOCALVERSION_BASE"
+          [ "$VARIANT" = "ksu" ] && LV="${LV}-ksu"
+
           export KBUILD_BUILD_USER="$BUILDER"
           export KBUILD_BUILD_HOST="$BUILD_HOST"
-          export LOCALVERSION="$LOCALVERSION"
+          export LOCALVERSION="$LV"
 
           rm -f out/arch/${ARCH}/boot/Image.gz-dtb 2>/dev/null || true
           mkdir -p out
 
           make O=out ARCH=${ARCH} ${DEFCONFIG}
+
+          if [ "$VARIANT" = "ksu" ]; then
+            for c in $KSU_CONFIGS; do
+              scripts/config --file out/.config -e "$c"
+            done
+            make O=out ARCH=${ARCH} olddefconfig
+            # olddefconfig diam-diam membuang opsi yang dependensinya tidak terpenuhi
+            grep -q '^CONFIG_KSU=y' out/.config || { echo "CONFIG_KSU tidak aktif"; exit 1; }
+            grep -E '^CONFIG_(KSU|KPROBES|HAVE_KPROBES|KPROBE_EVENTS)' out/.config || true
+          fi
 
           START=$(date +%s)
 
@@ -109,7 +152,7 @@ jobs:
 
       - name: Package with AnyKernel3
         run: |
-          ZIPN="${KERNEL_NAME}-${BUILD_DATE}-${SHORT_SHA}"
+          ZIPN="${KERNEL_NAME}-${VARIANT}-${BUILD_DATE}-${SHORT_SHA}"
           echo "ZIPN=${ZIPN}" >> $GITHUB_ENV
 
           git clone --depth=1 "$AK3_REPO" ~/anykernel
@@ -145,6 +188,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: build-log
+          name: build-log-${{ matrix.variant }}
           path: out/build.log
           if-no-files-found: ignore
+          
