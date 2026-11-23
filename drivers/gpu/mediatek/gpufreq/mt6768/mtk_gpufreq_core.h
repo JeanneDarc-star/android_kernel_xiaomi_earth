@@ -47,8 +47,8 @@
 #define SEG_GPU_DVFS_FREQ27			(460000)	/* KHz */
 #define SEG_GPU_DVFS_FREQ28			(440000)	/* KHz */
 #define SEG_GPU_DVFS_FREQ29			(420000)	/* KHz */
-#define SEG_GPU_DVFS_FREQ30			(405000)	/* KHz */
-#define SEG_GPU_DVFS_FREQ31			(390000)	/* KHz */
+#define SEG_GPU_DVFS_FREQ30			(410000)	/* KHz */
+#define SEG_GPU_DVFS_FREQ31			(400000)	/* KHz */
 
 #define SEG_GPU_DVFS_VOLT0		(95000)		/* mV x 100 */
 #define SEG_GPU_DVFS_VOLT1		(92500)		/* mV x 100 */
